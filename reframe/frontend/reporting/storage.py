@@ -21,6 +21,7 @@ from sqlalchemy import (and_,
                         select,
                         Table,
                         Text)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine.url import URL
 from sqlalchemy.sql.elements import ClauseElement
 
@@ -52,6 +53,11 @@ class _ConnectionStrategy:
     def _connection_kwargs(self):
         '''Per‑dialect kwargs for `create_engine()`'''
         return {}
+
+    @property
+    def json_column_type(self):
+        '''Return the JSON column type to use for JSON payloads'''
+        return Text
 
 
 class _SqliteConnector(_ConnectionStrategy):
@@ -125,6 +131,10 @@ class _PostgresConnector(_ConnectionStrategy):
         timeout = runtime().get_option('storage/0/postgresql_conn_timeout')
         return {'connect_args': {'connect_timeout': timeout}}
 
+    @property
+    def json_column_type(self):
+        return JSONB
+
 
 class StorageBackend:
     '''Abstract class that represents the results backend storage'''
@@ -196,7 +206,7 @@ class _SqlStorage(StorageBackend):
                                       Column('uuid', Text, primary_key=True),
                                       Column('session_start_unix', Float),
                                       Column('session_end_unix', Float),
-                                      Column('json_blob', Text),
+                                      Column('json_blob', self.__connector.json_column_type),
                                       Column('report_file', Text))
         self.__testcases_table = Table('testcases', self.__metadata,
                                        Column('name', Text),
@@ -325,6 +335,9 @@ class _SqlStorage(StorageBackend):
         session_infos = {}
         sessions = {}
         for uuid, json_blob in results:
+            if not isinstance(json_blob, str):
+                # serialize into a json string
+                json_blob = json.dumps(json_blob)
             sessions.setdefault(uuid, json_blob)
             session_infos.setdefault(uuid, _extract_sess_info(json_blob))
 
