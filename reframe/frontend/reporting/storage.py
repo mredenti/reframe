@@ -277,12 +277,19 @@ class _SqlStorage(StorageBackend):
         session_start_unix = report['session_info']['time_start_unix']
         session_end_unix = report['session_info']['time_end_unix']
         session_uuid = report['session_info']['uuid']
+        report_json = jsonext.dumps(report)
+        # Choose payload shape per backend
+        if self.__connector.json_column_type is JSONB:
+            json_payload = json.loads(report_json)  
+        else:
+            json_payload = report_json
+
         conn.execute(
             self.__sessions_table.insert().values(
                 uuid=session_uuid,
                 session_start_unix=session_start_unix,
                 session_end_unix=session_end_unix,
-                json_blob=jsonext.dumps(report),
+                json_blob=json_payload,
                 report_file=report_file_path
             )
         )
